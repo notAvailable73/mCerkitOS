@@ -1,9 +1,9 @@
 #include <lib/debug.h>
 #include "import.h"
 
-#define PAGESIZE     4096
-#define VM_USERLO    0x40000000
-#define VM_USERHI    0xF0000000
+#define PAGESIZE 4096
+#define VM_USERLO 0x40000000
+#define VM_USERHI 0xF0000000
 #define VM_USERLO_PI (VM_USERLO / PAGESIZE)
 #define VM_USERHI_PI (VM_USERHI / PAGESIZE)
 
@@ -21,8 +21,14 @@ void pmem_init(unsigned int mbi_addr)
 {
     unsigned int nps;
 
-    // TODO: Define your local variables here.
-
+    // TODO: Define your local variables here. 
+    unsigned int table_nrow;
+    unsigned int start_addr;
+    unsigned int length;
+    unsigned int highest_addr;
+    unsigned int page_idx;
+    unsigned int perm;
+    unsigned int i; // done
     // Calls the lower layer initialization primitive.
     // The parameter mbi_addr should not be used in the further code.
     devinit(mbi_addr);
@@ -34,8 +40,20 @@ void pmem_init(unsigned int mbi_addr)
      *       divided by the page size.
      */
     // TODO
+    table_nrow = get_size();
+    if (table_nrow == 0)
+    {
+        nps = 0;
+    }
+    else
+    {
 
-    set_nps(nps);  // Setting the value computed above to NUM_PAGES.
+        start_addr = get_mms(table_nrow - 1);
+        length = get_mml(table_nrow - 1);
+        highest_addr = start_addr + length - 1;
+        nps = (highest_addr+1)/PAGESIZE;
+    } // done
+    set_nps(nps); // Setting the value computed above to NUM_PAGES.
 
     /**
      * Initialization of the physical allocation table (AT).
@@ -61,4 +79,46 @@ void pmem_init(unsigned int mbi_addr)
      *    so in that case, you should consider those pages as unavailable.
      */
     // TODO
+    for (i = 0; i < VM_USERLO_PI; i++)
+    {
+        at_set_perm(i, 1);
+    }
+    for (i = VM_USERHI_PI; i < nps; i++)
+    {
+        at_set_perm(i, 1);
+    }
+    // set all default permission to 0
+    for (i = VM_USERLO_PI; i < VM_USERHI_PI; i++)
+    {
+        at_set_perm(i, 0);
+    }
+    for (i = 0; i < table_nrow; i++)
+    {
+        start_addr = get_mms(i);
+        length = get_mml(i);
+        perm = is_usable(i);
+        perm = perm == 1 ? 2 : 0;
+        page_idx = start_addr / PAGESIZE;
+        // align to the beginning of a page
+        if (page_idx * PAGESIZE < start_addr)
+        {
+            page_idx++;
+        }
+        // the whole page resides in this row
+        while ((page_idx + 1) * PAGESIZE <= start_addr + length)
+        {
+            // the kernel reserved area
+            if (page_idx < VM_USERLO_PI)
+            {
+                page_idx++;
+                continue;
+            }
+            if (page_idx >= VM_USERHI_PI)
+            {
+                break;
+            }
+            at_set_perm(page_idx, perm);
+            page_idx++;
+        }
+    } //done
 }
